@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/nav_schedule" android:icon="@drawable/ic_schedule" android:title="Schedule" />
+    <item android:id="@+id/nav_insights" android:icon="@drawable/ic_insights" android:title="Insights" />
+    <item android:id="@+id/nav_sync" android:icon="@drawable/ic_sync" android:title="Sync" />
+    <item android:id="@+id/nav_standings" android:icon="@drawable/ic_trophy" android:title="Table" />
+    <item android:id="@+id/nav_setup" android:icon="@drawable/ic_tune" android:title="Setup" />
+</menu>

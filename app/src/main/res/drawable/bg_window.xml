@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deep gradient with soft glowing orbs: the "scene" the glass panels float over. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="300"
+                android:centerColor="#2B2467"
+                android:endColor="#0B6E7A"
+                android:startColor="#120C2E" />
+        </shape>
+    </item>
+    <item
+        android:left="-120dp"
+        android:top="-60dp"
+        android:width="420dp"
+        android:height="420dp"
+        android:gravity="top|start">
+        <shape android:shape="oval">
+            <gradient
+                android:endColor="#00FF4081"
+                android:gradientRadius="210dp"
+                android:startColor="#AAFF4081"
+                android:type="radial" />
+        </shape>
+    </item>
+    <item
+        android:right="-140dp"
+        android:top="220dp"
+        android:width="440dp"
+        android:height="440dp"
+        android:gravity="top|end">
+        <shape android:shape="oval">
+            <gradient
+                android:endColor="#007C4DFF"
+                android:gradientRadius="220dp"
+                android:startColor="#AA7C4DFF"
+                android:type="radial" />
+        </shape>
+    </item>
+    <item
+        android:bottom="-150dp"
+        android:left="-60dp"
+        android:width="460dp"
+        android:height="460dp"
+        android:gravity="bottom|start">
+        <shape android:shape="oval">
+            <gradient
+                android:endColor="#0000E5C0"
+                android:gradientRadius="230dp"
+                android:startColor="#9900E5C0"
+                android:type="radial" />
+        </shape>
+    </item>
+</layer-list>

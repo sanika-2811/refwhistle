@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <color name="rw_primary">#3949AB</color>
+    <color name="rw_primary_dark">#1A237E</color>
+    <color name="rw_secondary">#00897B</color>
+    <color name="rw_accent">#FF7043</color>
+    <color name="rw_header_start">#1A237E</color>
+    <color name="rw_header_end">#00897B</color>
+    <color name="rw_heat">#33FF9800</color>
+    <color name="rw_danger">#E53935</color>
+    <color name="rw_ok">#43A047</color>
+</resources>

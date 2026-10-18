@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/menu_seed" android:title="Load demo tournament" />
+    <item android:id="@+id/menu_add" android:title="Add a match" />
+    <item android:id="@+id/menu_map" android:title="Venue map" />
+    <item android:id="@+id/menu_rain" android:title="Rain or ground closed" />
+    <item android:id="@+id/menu_csv" android:title="Export schedule (CSV)" />
+    <item android:id="@+id/menu_ledger" android:title="Sync check" />
+    <item android:id="@+id/menu_account" android:title="Account" />
+    <item android:id="@+id/menu_role" android:title="Switch role" />
+</menu>

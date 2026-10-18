@@ -1,0 +1,15 @@
+name: refwhistle_standings
+description: Live standings dashboard for RefWhistle tournaments.
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+
+flutter:
+  uses-material-design: true

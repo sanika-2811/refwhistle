@@ -1,0 +1,33 @@
+# --- secrets and signing (never commit) ---
+keystore.properties
+*.jks
+*.keystore
+local.properties
+google-services.json
+app/google-services.json
+
+# --- build output ---
+build/
+.gradle/
+.cxx/
+.externalNativeBuild/
+captures/
+*.apk
+*.aab
+
+# --- IDE ---
+.idea/
+*.iml
+.DS_Store
+
+# --- Flutter ---
+flutter_standings/.dart_tool/
+flutter_standings/.flutter-plugins
+flutter_standings/.flutter-plugins-dependencies
+flutter_standings/.packages
+flutter_standings/.pub-cache/
+flutter_standings/.pub/
+flutter_standings/.firebase/
+
+# --- Office temp files ---
+~$*

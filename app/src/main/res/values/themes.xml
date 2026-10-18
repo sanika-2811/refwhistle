@@ -1,0 +1,44 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Glass UI is dark by design: translucent white panels over a deep gradient scene. -->
+    <style name="Base.Theme.Refwhistle" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">#B39DDB</item>
+        <item name="colorSecondary">#4DD0C4</item>
+        <item name="colorTertiary">#FF8A80</item>
+        <item name="android:windowBackground">@drawable/bg_window</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <!-- menus, dropdowns and dialogs use the same glass look -->
+        <item name="popupMenuStyle">@style/RW.PopupMenu</item>
+        <item name="actionOverflowMenuStyle">@style/RW.PopupMenu.Overflow</item>
+        <item name="spinnerStyle">@style/RW.Spinner</item>
+        <item name="android:spinnerStyle">@style/RW.Spinner.Framework</item>
+        <item name="android:backgroundDimAmount">0.55</item>
+    </style>
+
+    <style name="Theme.Refwhistle" parent="Base.Theme.Refwhistle" />
+
+    <style name="RW.PopupMenu" parent="Widget.Material3.PopupMenu">
+        <item name="android:popupBackground">@drawable/bg_popup</item>
+    </style>
+
+    <style name="RW.PopupMenu.Overflow" parent="Widget.Material3.PopupMenu.Overflow">
+        <item name="android:popupBackground">@drawable/bg_popup</item>
+    </style>
+
+    <style name="RW.Spinner" parent="Widget.AppCompat.Spinner">
+        <item name="android:popupBackground">@drawable/bg_popup</item>
+    </style>
+
+    <style name="RW.Spinner.Framework" parent="@android:style/Widget.Material.Spinner">
+        <item name="android:popupBackground">@drawable/bg_popup</item>
+    </style>
+
+    <style name="RW.Card" parent="Widget.Material3.CardView.Outlined">
+        <item name="cardCornerRadius">20dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="cardBackgroundColor">#24FFFFFF</item>
+        <item name="strokeColor">#4DFFFFFF</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+</resources>
