@@ -31,3 +31,6 @@ flutter_standings/.firebase/
 
 # --- Office temp files ---
 ~$*
+
+# --- presentations (kept locally, not in the repo) ---
+*.pptx
