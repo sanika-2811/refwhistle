@@ -44,7 +44,12 @@ public class LogCodec {
     public static List<Operation> decodeAll(String text) {
         List<Operation> out = new ArrayList<Operation>();
         for (String line : text.split("\n")) {
-            if (!line.trim().isEmpty()) out.add(decode(line.replace("\r", "")));
+            if (line.trim().isEmpty()) continue;
+            try {
+                out.add(decode(line.replace("\r", "")));
+            } catch (RuntimeException unreadable) {
+                // an entry from a different app version: skip it, keep the rest
+            }
         }
         return out;
     }

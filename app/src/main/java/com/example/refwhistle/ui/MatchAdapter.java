@@ -5,7 +5,6 @@ import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -62,8 +61,6 @@ public class MatchAdapter extends RecyclerView.Adapter<MatchAdapter.VH> {
         h.time.setText(MainActivity.fmt(m.startMin));
         h.dur.setText(m.durationMin + " min");
         h.teams.setText(t.teamName(m.teamA) + "  vs  " + t.teamName(m.teamB));
-        h.logoA.setImageDrawable(Logos.get(h.itemView.getContext(), m.teamA, t.teamName(m.teamA)));
-        h.logoB.setImageDrawable(Logos.get(h.itemView.getContext(), m.teamB, t.teamName(m.teamB)));
         h.meta.setText(t.venueName(m.venueId) + "  •  Ref " + t.refereeName(m.refereeId));
         h.chips.removeAllViews();
         Venue v = t.venueMap().get(m.venueId);
@@ -114,7 +111,6 @@ public class MatchAdapter extends RecyclerView.Adapter<MatchAdapter.VH> {
         final View stripe;
         final TextView time, dur, teams, meta, score;
         final ChipGroup chips;
-        final ImageView logoA, logoB;
 
         VH(View v) {
             super(v);
@@ -125,8 +121,6 @@ public class MatchAdapter extends RecyclerView.Adapter<MatchAdapter.VH> {
             meta = v.findViewById(R.id.tvMeta);
             score = v.findViewById(R.id.tvScore);
             chips = v.findViewById(R.id.chips);
-            logoA = v.findViewById(R.id.ivLogoA);
-            logoB = v.findViewById(R.id.ivLogoB);
         }
     }
 }

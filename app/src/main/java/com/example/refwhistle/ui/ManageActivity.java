@@ -30,21 +30,6 @@ public class ManageActivity extends AppCompatActivity {
     private CheckBox cbOutdoor;
     private Button btOpen, btClose;
     private View venueBox;
-    private android.widget.LinearLayout logoBox;
-    private String pendingLogoTeam;
-    private final androidx.activity.result.ActivityResultLauncher<String[]> logoPicker =
-            registerForActivityResult(new androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
-                    new androidx.activity.result.ActivityResultCallback<android.net.Uri>() {
-                        public void onActivityResult(android.net.Uri uri) {
-                            if (uri == null || pendingLogoTeam == null) return;
-                            String b64 = Logos.encode(ManageActivity.this, uri);
-                            boolean ok = b64 != null;
-                            if (ok) db.setLogo(pendingLogoTeam, b64);
-                            Toast.makeText(ManageActivity.this, ok ? "Logo saved" : "Could not read that image",
-                                    Toast.LENGTH_SHORT).show();
-                            showList();
-                        }
-                    });
     private Spinner spRefTeam;
     private java.util.List<Team> teamList = new java.util.ArrayList<Team>();
     private TextView tvList;
@@ -53,9 +38,14 @@ public class ManageActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_manage);
         db = new DBHelper(this, getSharedPreferences("refwhistle", Context.MODE_PRIVATE)
                 .getString("device_id", "dev-unknown"));
+        if (!MainActivity.isAdminNow(this, db)) {
+            Toast.makeText(this, "Only admins can change the setup.", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+        setContentView(R.layout.activity_manage);
         spKind = findViewById(R.id.spKind);
         etName = findViewById(R.id.etName);
         etLat = findViewById(R.id.etLat);
@@ -64,7 +54,6 @@ public class ManageActivity extends AppCompatActivity {
         btOpen = findViewById(R.id.btOpen);
         btClose = findViewById(R.id.btClose);
         venueBox = findViewById(R.id.venueBox);
-        logoBox = findViewById(R.id.logoBox);
         spRefTeam = findViewById(R.id.spRefTeam);
         tvList = findViewById(R.id.tvList);
 
@@ -89,6 +78,85 @@ public class ManageActivity extends AppCompatActivity {
         findViewById(R.id.btAddItem).setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) { add(); }
         });
+        findViewById(R.id.btEditItem).setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { pickItem(); }
+        });
+        showList();
+    }
+
+    /** First step of rename / remove: choose which team, venue or referee. */
+    private void pickItem() {
+        final java.util.List<String> labels = new java.util.ArrayList<String>();
+        final java.util.List<String> kinds = new java.util.ArrayList<String>();
+        final java.util.List<String> ids = new java.util.ArrayList<String>();
+        final java.util.List<String> names = new java.util.ArrayList<String>();
+        for (Team t : db.getTeams()) { labels.add("Team: " + t.name); kinds.add("Team"); ids.add(t.id); names.add(t.name); }
+        for (Venue v : db.getVenues()) { labels.add("Venue: " + v.name); kinds.add("Venue"); ids.add(v.id); names.add(v.name); }
+        for (Referee r : db.getReferees()) { labels.add("Referee: " + r.name); kinds.add("Referee"); ids.add(r.id); names.add(r.name); }
+        if (labels.isEmpty()) {
+            Toast.makeText(this, "Nothing to edit yet", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        UiKit.dialog(this).setTitle("Which one?")
+                .setItems(labels.toArray(new String[0]), new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int which) {
+                        itemActions(kinds.get(which), ids.get(which), names.get(which));
+                    }
+                }).setNegativeButton("Cancel", null).show();
+    }
+
+    private void itemActions(final String kind, final String id, final String name) {
+        final EditText et = new EditText(this);
+        et.setText(name);
+        android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setPadding(UiKit.dp(this, 24), UiKit.dp(this, 12), UiKit.dp(this, 24), 0);
+        box.addView(et, new android.widget.LinearLayout.LayoutParams(-1, -2));
+        UiKit.dialog(this).setTitle(kind + ": " + name).setView(box)
+                .setPositiveButton("Rename", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        rename(kind, id, et.getText().toString().trim());
+                    }
+                })
+                .setNeutralButton("Remove", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        remove(kind, id, name);
+                    }
+                })
+                .setNegativeButton("Cancel", null).show();
+    }
+
+    private void rename(String kind, String id, String newName) {
+        if (newName.isEmpty()) {
+            Toast.makeText(this, "Enter a name", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (kind.equals("Team")) {
+            db.addTeam(id, newName);
+        } else if (kind.equals("Venue")) {
+            for (Venue v : db.getVenues()) {
+                if (v.id.equals(id)) db.addVenue(id, newName, v.outdoor, v.openMin, v.closeMin, v.lat, v.lng);
+            }
+        } else {
+            for (Referee r : db.getReferees()) {
+                if (r.id.equals(id)) db.addReferee(id, newName, r.teamId);
+            }
+        }
+        showList();
+    }
+
+    private void remove(String kind, String id, String name) {
+        // a team, venue or referee that still has matches cannot go: those matches would break
+        for (com.example.refwhistle.domain.Match m : db.getMatches()) {
+            boolean used = kind.equals("Team") ? m.hasTeam(id)
+                    : kind.equals("Venue") ? m.venueId.equals(id) : m.refereeId.equals(id);
+            if (used) {
+                Toast.makeText(this, name + " still has matches. Cancel those matches first.", Toast.LENGTH_LONG).show();
+                return;
+            }
+        }
+        if (kind.equals("Team")) db.removeTeam(id);
+        else if (kind.equals("Venue")) db.removeVenue(id);
+        else db.removeReferee(id);
         showList();
     }
 
@@ -122,7 +190,9 @@ public class ManageActivity extends AppCompatActivity {
             return;
         }
         int kind = spKind.getSelectedItemPosition();
-        String id = (kind == 0 ? "T" : kind == 1 ? "V" : "R") + System.currentTimeMillis() % 100000;
+        // time + a few random characters: two admins adding at the same moment never get the same id
+        String id = (kind == 0 ? "T" : kind == 1 ? "V" : "R") + System.currentTimeMillis() % 100000
+                + "-" + java.util.UUID.randomUUID().toString().substring(0, 3);
         if (kind == 0) {
             db.addTeam(id, name);
         } else if (kind == 1) {
@@ -149,37 +219,7 @@ public class ManageActivity extends AppCompatActivity {
         }
     }
 
-    private void showLogos() {
-        Logos.apply(db.state().logos);
-        logoBox.removeAllViews();
-        for (final Team t : db.getTeams()) {
-            android.widget.LinearLayout row = new android.widget.LinearLayout(this);
-            row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            row.setPadding(0, UiKit.dp(this, 4), 0, UiKit.dp(this, 4));
-            android.widget.ImageView iv = new android.widget.ImageView(this);
-            iv.setImageDrawable(Logos.get(this, t.id, t.name));
-            row.addView(iv, new android.widget.LinearLayout.LayoutParams(UiKit.dp(this, 40), UiKit.dp(this, 40)));
-            TextView name = new TextView(this);
-            name.setText(t.name);
-            name.setPadding(UiKit.dp(this, 12), 0, 0, 0);
-            row.addView(name, new android.widget.LinearLayout.LayoutParams(0, -2, 1));
-            Button pick = new Button(this);
-            pick.setText(Logos.has(t.id) ? "Change" : "Set logo");
-            pick.setTextSize(12);
-            pick.setOnClickListener(new View.OnClickListener() {
-                public void onClick(View v) {
-                    pendingLogoTeam = t.id;
-                    logoPicker.launch(new String[]{"image/*"});
-                }
-            });
-            row.addView(pick);
-            logoBox.addView(row);
-        }
-    }
-
     private void showList() {
-        showLogos();
         StringBuilder sb = new StringBuilder("Teams:\n");
         for (Team t : db.getTeams()) sb.append("  ").append(t.name).append('\n');
         sb.append("\nVenues:\n");

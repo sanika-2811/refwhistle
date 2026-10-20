@@ -28,7 +28,6 @@ public class StandingsActivity extends AppCompatActivity {
                 .getString("device_id", "dev-unknown"));
         Tournament t = db.loadTournament();
         Replayer.Result st = db.state();
-        Logos.apply(st.logos);
         final List<Standings.Row> rows = Standings.compute(t, st.matches, st.results);
 
         LinearLayout body = UiKit.screen(this, "League table",
@@ -67,13 +66,6 @@ public class StandingsActivity extends AppCompatActivity {
         int pad = UiKit.dp(this, header ? 4 : 9);
         row.setPadding(0, pad, 0, pad);
         row.addView(cell(rank, 0.5f, header, false, index < 3 && !header));
-        android.widget.ImageView logo = new android.widget.ImageView(this);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(UiKit.dp(this, 26), UiKit.dp(this, 26));
-        lp.setMarginEnd(UiKit.dp(this, 8));
-        logo.setLayoutParams(lp);
-        if (teamId != null) logo.setImageDrawable(Logos.get(this, teamId, team));
-        else logo.setVisibility(View.INVISIBLE);
-        row.addView(logo);
         TextView name = cell(team, 3f, header, false, false);
         name.setGravity(Gravity.START);
         row.addView(name);

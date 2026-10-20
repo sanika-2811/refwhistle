@@ -38,10 +38,14 @@ public class CreateFixtureActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_create_fixture);
-
         SharedPreferences sp = getSharedPreferences("refwhistle", Context.MODE_PRIVATE);
         db = new DBHelper(this, sp.getString("device_id", "dev-unknown"));
+        if (!MainActivity.isAdminNow(this, db)) {
+            android.widget.Toast.makeText(this, "Only admins can add matches.", android.widget.Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+        setContentView(R.layout.activity_create_fixture);
         tournament = db.loadTournament();
 
         spTeamA = findViewById(R.id.spTeamA);

@@ -7,13 +7,13 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
 import com.example.refwhistle.domain.HybridLogicalClock;
-import com.example.refwhistle.domain.Ledger;
 import com.example.refwhistle.domain.LogCodec;
 import com.example.refwhistle.domain.Match;
 import com.example.refwhistle.domain.OpLog;
 import com.example.refwhistle.domain.Operation;
 import com.example.refwhistle.domain.Referee;
 import com.example.refwhistle.domain.Replayer;
+import com.example.refwhistle.domain.SetupOps;
 import com.example.refwhistle.domain.Stamp;
 import com.example.refwhistle.domain.Team;
 import com.example.refwhistle.domain.Tournament;
@@ -28,22 +28,39 @@ import java.util.List;
  * The fixtures are NOT stored as rows. The only source of truth for matches is the append-only
  * op_log table; the current schedule is always "replay the sorted log" (Replayer). That is what
  * lets two phones converge: they just exchange op_log rows.
- * Teams, venues and referees are plain setup tables (seed the same sample data on both phones).
+ * Teams, venues and referees are log entries too (SetupOps); their tables are rebuilt from the log.
  */
 public class DBHelper extends SQLiteOpenHelper {
     private static final String DB_NAME = "refwhistle.db";
     private static final int DB_VERSION = 3;
     public static final int DAYS = 3;
 
+    /** Called after a local change is written (the auto-sync uses it to push the change). */
+    public static volatile Runnable onLocalChange;
+
+    // One clock for the whole process: every DBHelper (screens, sync) shares it, so a stamp is always
+    // later than every entry already merged, even from a phone whose wall clock runs ahead.
+    private static HybridLogicalClock sharedClock;
+    private static String sharedClockDevice;
+
+    private static synchronized HybridLogicalClock clockFor(String deviceId) {
+        if (sharedClock == null || !deviceId.equals(sharedClockDevice)) {
+            sharedClock = new HybridLogicalClock(deviceId);
+            sharedClockDevice = deviceId;
+        }
+        return sharedClock;
+    }
+
     private final HybridLogicalClock clock;
 
     public DBHelper(Context context, String deviceId) {
         super(context, DB_NAME, null, DB_VERSION);
-        this.clock = new HybridLogicalClock(deviceId);
+        this.clock = clockFor(deviceId);
         // never stamp below anything already in the log
         for (Operation op : getOps()) {
             clock.receive(op.stamp, System.currentTimeMillis());
         }
+        migrateOldSetup();
     }
 
     @Override
@@ -68,67 +85,156 @@ public class DBHelper extends SQLiteOpenHelper {
 
     // ---------- setup data ----------
 
-    /** Same ids on every phone, so two admins can start from identical setup data. */
+    /** Adds the demo teams, venues and referees (same ids on every phone) and clears the matches. */
     public void seedSampleData() {
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();
         try {
-            db.delete("op_log", null, null);
-            db.delete("referee", null, null);
-            db.delete("venue", null, null);
-            db.delete("team", null, null);
+            // The log is never wiped (other phones would send it straight back): the matches are
+            // cancelled with log entries, and the demo setup is added with fixed ids.
+            for (Match old : getMatches()) {
+                appendOp(db, Operation.Type.CANCEL_MATCH, old.id, null, null);
+            }
             String[] teams = {"Thunder Hawks", "Blue Lions", "Royal Tigers", "Red Falcons", "Storm Riders",
                     "Iron Wolves", "Golden Eagles", "Silver Sharks", "Night Panthers", "Fire Dragons",
                     "Ocean Titans", "Wild Cobras"};
             for (int i = 0; i < teams.length; i++) {
-                addTeam("T" + (i + 1), teams[i]);
+                appendOp(db, Operation.Type.ADD_TEAM, "T" + (i + 1), null, SetupOps.teamData(teams[i]));
             }
-            addVenue("V1", "Main Ground", true, 8 * 60, 20 * 60, 18.5204, 73.8567);
-            addVenue("V2", "Indoor Court", false, 8 * 60, 20 * 60, 18.5214, 73.8577);
-            addVenue("V3", "Back Field", true, 8 * 60, 18 * 60, 18.5194, 73.8547);
+            appendOp(db, Operation.Type.ADD_VENUE, "V1", null,
+                    SetupOps.venueData("Main Ground", true, 8 * 60, 20 * 60, 18.5204, 73.8567));
+            appendOp(db, Operation.Type.ADD_VENUE, "V2", null,
+                    SetupOps.venueData("Indoor Court", false, 8 * 60, 20 * 60, 18.5214, 73.8577));
+            appendOp(db, Operation.Type.ADD_VENUE, "V3", null,
+                    SetupOps.venueData("Back Field", true, 8 * 60, 18 * 60, 18.5194, 73.8547));
             // each referee is also a student of one team: the scheduler never assigns them to it
             String[] refNames = {"Aarav", "Meera", "Rohan", "Isha", "Kabir", "Nisha"};
             for (int i = 1; i <= refNames.length; i++) {
-                addReferee("R" + i, refNames[i - 1], "T" + i);
+                appendOp(db, Operation.Type.ADD_REFEREE, "R" + i, null, SetupOps.refereeData(refNames[i - 1], "T" + i));
             }
+            rebuildSetup(db);
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+        changed();
+    }
+
+    // Setup entries are log entries like any other; the tables below are rebuilt from them, so a
+    // phone that receives the entries ends up with exactly the same teams, venues and referees.
+
+    public void addTeam(String id, String name) {
+        appendSetup(Operation.Type.ADD_TEAM, id, SetupOps.teamData(name));
+    }
+
+    public void addVenue(String id, String name, boolean outdoor, int open, int close, double lat, double lng) {
+        appendSetup(Operation.Type.ADD_VENUE, id, SetupOps.venueData(name, outdoor, open, close, lat, lng));
+    }
+
+    public void setVenueLocation(String venueId, double lat, double lng) {
+        appendSetup(Operation.Type.SET_VENUE_LOCATION, venueId, SetupOps.locationData(lat, lng));
+    }
+
+    public void addReferee(String id, String name, String teamId) {
+        appendSetup(Operation.Type.ADD_REFEREE, id, SetupOps.refereeData(name, teamId));
+    }
+
+    /** Stores the hash of the admin password in the log; the earliest one in the log is the real one. */
+    public void setAdminPassword(String passwordHash) {
+        append(Operation.Type.SET_ADMIN_PIN, "admin", null, passwordHash);
+    }
+
+    public void removeTeam(String id) {
+        appendSetup(Operation.Type.REMOVE_TEAM, id, null);
+    }
+
+    public void removeVenue(String id) {
+        appendSetup(Operation.Type.REMOVE_VENUE, id, null);
+    }
+
+    public void removeReferee(String id) {
+        appendSetup(Operation.Type.REMOVE_REFEREE, id, null);
+    }
+
+    /** Setup rows written by an older version have no log entry yet: give them one, so they sync too. */
+    private void migrateOldSetup() {
+        Tournament known = new Tournament();
+        SetupOps.fold(getOps(), known);
+        java.util.Set<String> ids = new java.util.HashSet<String>();
+        for (Team x : known.teams) ids.add("T" + x.id);
+        for (Venue v : known.venues) ids.add("V" + v.id);
+        for (Referee r : known.referees) ids.add("R" + r.id);
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            boolean any = false;
+            for (Team x : getTeams()) {
+                if (ids.contains("T" + x.id)) continue;
+                appendOp(db, Operation.Type.ADD_TEAM, x.id, null, SetupOps.teamData(x.name));
+                any = true;
+            }
+            for (Venue v : getVenues()) {
+                if (ids.contains("V" + v.id)) continue;
+                appendOp(db, Operation.Type.ADD_VENUE, v.id, null,
+                        SetupOps.venueData(v.name, v.outdoor, v.openMin, v.closeMin, v.lat, v.lng));
+                any = true;
+            }
+            for (Referee r : getReferees()) {
+                if (ids.contains("R" + r.id)) continue;
+                appendOp(db, Operation.Type.ADD_REFEREE, r.id, null, SetupOps.refereeData(r.name, r.teamId));
+                any = true;
+            }
+            if (any) rebuildSetup(db);
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
         }
     }
 
-    public void addTeam(String id, String name) {
-        ContentValues cv = new ContentValues();
-        cv.put("id", id);
-        cv.put("name", name);
-        getWritableDatabase().insertWithOnConflict("team", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+    private void appendSetup(Operation.Type type, String id, String data) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            appendOp(db, type, id, null, data);
+            rebuildSetup(db);
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+        changed();
     }
 
-    public void addVenue(String id, String name, boolean outdoor, int open, int close, double lat, double lng) {
-        ContentValues cv = new ContentValues();
-        cv.put("id", id);
-        cv.put("name", name);
-        cv.put("outdoor", outdoor ? 1 : 0);
-        cv.put("open_min", open);
-        cv.put("close_min", close);
-        cv.put("lat", lat);
-        cv.put("lng", lng);
-        getWritableDatabase().insertWithOnConflict("venue", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
-    }
-
-    public void setVenueLocation(String venueId, double lat, double lng) {
-        ContentValues cv = new ContentValues();
-        cv.put("lat", lat);
-        cv.put("lng", lng);
-        getWritableDatabase().update("venue", cv, "id = ?", new String[]{venueId});
-    }
-
-    public void addReferee(String id, String name, String teamId) {
-        ContentValues cv = new ContentValues();
-        cv.put("id", id);
-        cv.put("name", name);
-        cv.put("team_id", teamId == null ? "" : teamId);
-        getWritableDatabase().insertWithOnConflict("referee", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+    /** Rewrites the setup tables from the log (entries applied in stamp order). */
+    private void rebuildSetup(SQLiteDatabase db) {
+        Tournament t = new Tournament();
+        SetupOps.fold(getOps(), t);
+        db.delete("referee", null, null);
+        db.delete("venue", null, null);
+        db.delete("team", null, null);
+        for (Team x : t.teams) {
+            ContentValues cv = new ContentValues();
+            cv.put("id", x.id);
+            cv.put("name", x.name);
+            db.insertWithOnConflict("team", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+        }
+        for (Venue v : t.venues) {
+            ContentValues cv = new ContentValues();
+            cv.put("id", v.id);
+            cv.put("name", v.name);
+            cv.put("outdoor", v.outdoor ? 1 : 0);
+            cv.put("open_min", v.openMin);
+            cv.put("close_min", v.closeMin);
+            cv.put("lat", v.lat);
+            cv.put("lng", v.lng);
+            db.insertWithOnConflict("venue", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+        }
+        for (Referee r : t.referees) {
+            ContentValues cv = new ContentValues();
+            cv.put("id", r.id);
+            cv.put("name", r.name);
+            cv.put("team_id", r.teamId);
+            db.insertWithOnConflict("referee", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+        }
     }
 
     public List<Team> getTeams() {
@@ -180,23 +286,17 @@ public class DBHelper extends SQLiteOpenHelper {
         Cursor c = getReadableDatabase().rawQuery(
                 "SELECT physical, counter, device, type, match_id, payload, data FROM op_log", null);
         while (c.moveToNext()) {
+            Operation.Type type;
+            try {
+                type = Operation.Type.valueOf(c.getString(3));
+            } catch (IllegalArgumentException unknown) {
+                continue;   // an entry type this version no longer knows
+            }
             list.add(new Operation(new Stamp(c.getLong(0), c.getInt(1), c.getString(2)),
-                    Operation.Type.valueOf(c.getString(3)), c.getString(4),
-                    LogCodec.parseMatch(c.getString(5)), c.getString(6)));
+                    type, c.getString(4), LogCodec.parseMatch(c.getString(5)), c.getString(6)));
         }
         c.close();
         return list;
-    }
-
-    public List<Operation> getSortedOps() {
-        OpLog log = new OpLog();
-        log.merge(getOps());
-        return log.sorted();
-    }
-
-    /** Short SHA-256 chain head of the whole log. Equal on two phones = identical history. */
-    public String ledgerHead() {
-        return Ledger.shortHead(getSortedOps());
     }
 
     /** Current schedule = replay of the sorted log. */
@@ -237,11 +337,7 @@ public class DBHelper extends SQLiteOpenHelper {
         } finally {
             db.endTransaction();
         }
-    }
-
-    /** Logo = base64 PNG stored in the log (matchId slot holds the team id). */
-    public void setLogo(String teamId, String base64Png) {
-        append(Operation.Type.SET_LOGO, teamId, null, base64Png);
+        changed();
     }
 
     /** Referee events: real kick-off / full time, in minutes after midnight. */
@@ -276,10 +372,17 @@ public class DBHelper extends SQLiteOpenHelper {
         } finally {
             db.endTransaction();
         }
+        changed();
     }
 
     private void append(Operation.Type type, String matchId, Match payload, String data) {
         appendOp(getWritableDatabase(), type, matchId, payload, data);
+        changed();
+    }
+
+    private static void changed() {
+        Runnable r = onLocalChange;
+        if (r != null) r.run();
     }
 
     private void appendOp(SQLiteDatabase db, Operation.Type type, String matchId, Match payload, String data) {
@@ -304,12 +407,17 @@ public class DBHelper extends SQLiteOpenHelper {
     public int mergeOps(List<Operation> incoming) {
         SQLiteDatabase db = getWritableDatabase();
         int added = 0;
+        boolean setupChanged = false;
         db.beginTransaction();
         try {
             for (Operation op : incoming) {
                 clock.receive(op.stamp, System.currentTimeMillis());
-                if (insertOp(db, op)) added++;
+                if (insertOp(db, op)) {
+                    added++;
+                    if (SetupOps.isSetup(op.type)) setupChanged = true;
+                }
             }
+            if (setupChanged) rebuildSetup(db);
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();

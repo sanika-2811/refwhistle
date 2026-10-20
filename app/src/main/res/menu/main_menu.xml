@@ -5,7 +5,6 @@
     <item android:id="@+id/menu_map" android:title="Venue map" />
     <item android:id="@+id/menu_rain" android:title="Rain or ground closed" />
     <item android:id="@+id/menu_csv" android:title="Export schedule (CSV)" />
-    <item android:id="@+id/menu_ledger" android:title="Sync check" />
     <item android:id="@+id/menu_account" android:title="Account" />
     <item android:id="@+id/menu_role" android:title="Switch role" />
 </menu>

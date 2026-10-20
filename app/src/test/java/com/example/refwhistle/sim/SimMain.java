@@ -6,7 +6,6 @@ import com.example.refwhistle.domain.Match;
 import com.example.refwhistle.domain.Schedule;
 import com.example.refwhistle.domain.Tournament;
 
-import com.example.refwhistle.domain.Ledger;
 import com.example.refwhistle.domain.OpLog;
 import com.example.refwhistle.domain.Operation;
 import com.example.refwhistle.domain.WeatherPlanner;
@@ -57,17 +56,6 @@ public class SimMain {
         for (Match m : moves) System.out.println("   " + m);
 
         System.out.println();
-        System.out.println("== 6. Tamper-evident ledger ==");
-        OpLog log = new OpLog();
-        for (OpLog l : Simulator.randomDevices(t, 11, 40)) log.merge(l.all());
-        List<Operation> sorted = log.sorted();
-        List<String> trusted = Ledger.chain(sorted);
-        Operation v = sorted.get(sorted.size() / 2);
-        List<Operation> forged = new ArrayList<Operation>(sorted);
-        forged.set(sorted.size() / 2, new Operation(v.stamp, v.type, v.matchId, v.payload, "9|0"));
-        System.out.println("entries: " + sorted.size() + "  head: " + Ledger.shortHead(sorted));
-        System.out.println("edit entry #" + sorted.size() / 2 + " -> first mismatch detected at #"
-                + Ledger.firstMismatch(forged, trusted));
 
         System.out.println();
         System.out.println("== 7. Rain plan (Day 1, outdoor grounds closed 08:00-22:00) ==");

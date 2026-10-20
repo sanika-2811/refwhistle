@@ -12,4 +12,24 @@
     <color name="rw_heat">#33FF9800</color>
     <color name="rw_danger">#E53935</color>
     <color name="rw_ok">#43A047</color>
+
+    <!-- Glass look. In #AARRGGBB the first 2 digits are the transparency: 00 = invisible, FF = solid. -->
+    <color name="glass_fill">#24FFFFFF</color>
+    <color name="glass_stroke">#4DFFFFFF</color>
+    <color name="glass_stroke_strong">#66FFFFFF</color>
+    <color name="glass_top">#2EFFFFFF</color>
+    <color name="glass_bottom">#14FFFFFF</color>
+    <color name="glass_header_bottom">#10FFFFFF</color>
+    <color name="glass_header_stroke">#40FFFFFF</color>
+    <color name="glass_bar">#26FFFFFF</color>
+    <color name="glass_button">#55FFFFFF</color>
+    <color name="glass_button_stroke">#80FFFFFF</color>
+    <color name="glass_chip">#1FFFFFFF</color>
+    <color name="stat_top">#33FFFFFF</color>
+    <color name="stat_stroke">#59FFFFFF</color>
+    <color name="text_soft">#CCFFFFFF</color>
+    <color name="dialog_start">#F4271E63</color>
+    <color name="dialog_end">#F40E4A55</color>
+    <color name="popup_start">#F2281F5E</color>
+    <color name="popup_end">#F2124A55</color>
 </resources>

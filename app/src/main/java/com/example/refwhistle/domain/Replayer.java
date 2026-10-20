@@ -23,19 +23,9 @@ public class Replayer {
         public final java.util.Set<String> moved = new java.util.TreeSet<String>();
         /** matchId -> {scoreA, scoreB}; last result in log order wins. */
         public final Map<String, int[]> results = new TreeMap<String, int[]>();
-        /** teamId -> base64 PNG; last SET_LOGO in log order wins. */
-        public final Map<String, String> logos = new TreeMap<String, String>();
         /** matchId -> real kick-off / full-time (minutes after midnight), from referee events. */
         public final Map<String, Integer> actualStart = new TreeMap<String, Integer>();
         public final Map<String, Integer> actualEnd = new TreeMap<String, Integer>();
-
-        private String logosText() {
-            StringBuilder sb = new StringBuilder();
-            for (Map.Entry<String, String> e : logos.entrySet()) {
-                sb.append(e.getKey()).append('=').append(e.getValue().hashCode()).append(';');
-            }
-            return sb.toString();
-        }
 
         private String resultsText() {
             StringBuilder sb = new StringBuilder();
@@ -55,7 +45,7 @@ public class Replayer {
             return sorted.toString() + "|R" + new java.util.TreeSet<String>(rescheduled)
                     + "|U" + new java.util.TreeSet<String>(unplaceable)
                     + "|X" + new java.util.TreeSet<String>(rejectedMoves)
-                    + "|S" + resultsText() + "|L" + logosText()
+                    + "|S" + resultsText()
                     + "|K" + actualStart + "|F" + actualEnd;
         }
     }
@@ -117,10 +107,6 @@ public class Replayer {
                     }
                     break;
                 }
-                case SET_LOGO:
-                    // matchId carries the team id for this operation type
-                    if (op.data != null && !op.data.equals("-")) res.logos.put(op.matchId, op.data);
-                    break;
                 case SET_RESULT: {
                     if (res.matches.containsKey(op.matchId) && op.data != null) {
                         String[] p = op.data.split("\\|");

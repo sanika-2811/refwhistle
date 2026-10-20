@@ -135,6 +135,10 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
     }
 
     private void chooseVenue(final LatLng p) {
+        if (!MainActivity.isAdminNow(this, db)) {
+            Toast.makeText(this, "Only admins can place venues.", Toast.LENGTH_SHORT).show();
+            return;
+        }
         final Tournament t = db.loadTournament();
         if (t.venues.isEmpty()) {
             Toast.makeText(this, "No venues yet. Load demo data or add venues in Setup.", Toast.LENGTH_LONG).show();

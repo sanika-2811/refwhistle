@@ -29,8 +29,17 @@ public class LoginActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        LinearLayout body = UiKit.screen(this, "Welcome", "Sign in to back up and share your tournament.");
+        LinearLayout body = UiKit.screen(this, "Welcome", "Sign in once, or continue offline.");
+        // back on the entry screen closes the app (the AndroidX way, which also works with the back gesture)
+        getOnBackPressedDispatcher().addCallback(this, new androidx.activity.OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                finishAffinity();
+            }
+        });
         // no back arrow needed here: this is the entry screen
+        View back = getWindow().getDecorView().findViewWithTag("back");
+        if (back != null) back.setVisibility(View.GONE);
         LinearLayout card = UiKit.card(this, body);
         UiKit.text(this, card, "RefWhistle account", 18, true);
 
@@ -66,7 +75,8 @@ public class LoginActivity extends AppCompatActivity {
 
         LinearLayout off = UiKit.card(this, body);
         UiKit.text(this, off, "No internet at the ground?", 15, true);
-        UiKit.text(this, off, "Everything works offline. Sign in later to back up.", 13, false);
+        UiKit.text(this, off, "Everything works offline, and phones close to each other still sync over Bluetooth. "
+                + "Sign in later (Account in the menu) to sync over the internet.", 13, false);
         MaterialButton skip = button("Continue offline");
         skip.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
@@ -75,6 +85,11 @@ public class LoginActivity extends AppCompatActivity {
             }
         });
         off.addView(skip, lp(10));
+
+        LinearLayout note = UiKit.card(this, body);
+        UiKit.text(this, note, "Internet needed only once", 15, true);
+        UiKit.text(this, note, "If you sign in, you do it one time. After that the app stays signed in and works "
+                + "fully offline.", 13, false);
     }
 
     private LinearLayout.LayoutParams lp(int topDp) {
@@ -129,8 +144,4 @@ public class LoginActivity extends AppCompatActivity {
         finish();
     }
 
-    @Override
-    public void onBackPressed() {
-        finishAffinity();
-    }
 }

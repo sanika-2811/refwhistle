@@ -18,7 +18,7 @@
             android:layout_height="wrap_content"
             android:paddingBottom="6dp"
             android:text="&lt; Back"
-            android:textColor="#CCFFFFFF"
+            android:textColor="@color/text_soft"
             android:textSize="14sp" />
 
         <TextView
@@ -34,7 +34,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Long-press the map to place a venue."
-            android:textColor="#CCFFFFFF"
+            android:textColor="@color/text_soft"
             android:textSize="13sp" />
     </LinearLayout>
 

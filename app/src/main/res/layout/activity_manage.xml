@@ -86,19 +86,11 @@
             android:layout_marginTop="8dp"
             android:text="Add" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="Team logos"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <LinearLayout
-            android:id="@+id/logoBox"
+        <Button
+            android:id="@+id/btEditItem"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical" />
+            android:text="Rename or remove an item" />
 
         <TextView
             android:id="@+id/tvList"

@@ -8,7 +8,6 @@ import com.example.refwhistle.domain.ConflictChecker;
 import com.example.refwhistle.domain.DelayPropagator;
 import com.example.refwhistle.domain.GreedyScheduler;
 import com.example.refwhistle.domain.HybridLogicalClock;
-import com.example.refwhistle.domain.Ledger;
 import com.example.refwhistle.domain.LiveOps;
 import com.example.refwhistle.domain.Robustness;
 import com.example.refwhistle.domain.ScheduleCost;
@@ -108,25 +107,6 @@ public class CoreTest {
     }
 
     @Test
-    public void ledgerHeadIsOrderIndependentButDetectsTampering() {
-        Tournament t = Simulator.randomTournament(6, 2, 3, 2, 1);
-        OpLog a = new OpLog();
-        for (OpLog l : Simulator.randomDevices(t, 3, 30)) a.merge(l.all());
-        List<Operation> ops = a.all();
-        OpLog b = new OpLog();
-        java.util.Collections.shuffle(ops, new java.util.Random(9));
-        b.merge(ops);
-        assertEquals(Ledger.head(a.sorted()), Ledger.head(b.sorted()));
-
-        List<String> trusted = Ledger.chain(a.sorted());
-        List<Operation> forged = a.sorted();
-        Operation victim = forged.get(forged.size() / 2);
-        forged.set(forged.size() / 2, new Operation(victim.stamp, victim.type, victim.matchId,
-                victim.payload, "9|0"));
-        assertEquals(forged.size() / 2, Ledger.firstMismatch(forged, trusted));
-    }
-
-    @Test
     public void rainMovesOutdoorMatchesToSafeSlots() {
         Tournament t = Simulator.randomTournament(4, 3, 4, 1, 1);
         Schedule s = GreedyScheduler.schedule(t);
@@ -137,22 +117,6 @@ public class CoreTest {
         }
         assertTrue(Simulator.allFeasible(after, t));
         for (Match mv : r.moves) assertFalse(t.venueMap().get(mv.venueId).outdoor);
-    }
-
-    @Test
-    public void logosTravelThroughTheLogAndLastOneWins() {
-        Tournament t = Simulator.randomTournament(6, 2, 3, 2, 1);
-        HybridLogicalClock c1 = new HybridLogicalClock("devA");
-        HybridLogicalClock c2 = new HybridLogicalClock("devB");
-        OpLog log = new OpLog();
-        log.append(new Operation(c1.tick(1000), Operation.Type.SET_LOGO, "T1", null, "AAAA"));
-        Operation newer = new Operation(c2.tick(2000), Operation.Type.SET_LOGO, "T1", null, "BBBB");
-        log.append(newer);
-        // survives the text codec used by every sync channel
-        log.append(LogCodec.decode(LogCodec.encode(newer)));
-        Replayer.Result r = Replayer.replay(log.sorted(), t);
-        assertEquals("BBBB", r.logos.get("T1"));
-        assertEquals(2, log.size());
     }
 
     private static Tournament oneVenue() {
@@ -253,5 +217,153 @@ public class CoreTest {
             robust += r.robustAvg;
         }
         assertTrue("with term " + robust + " vs without " + plain, robust < plain);
+    }
+
+    @Test
+    public void bigLogTravelsInPartsAndComesBackIdentical() {
+        // 600 entries do not fit one Bluetooth message: they are split, arrive shuffled and twice
+        StringBuilder log = new StringBuilder();
+        for (int i = 0; i < 600; i++) log.append("1000\t").append(i).append("\tdev-a\tADD_MATCH\tm").append(i).append("\t\t\n");
+        String text = log.toString();
+        List<String> parts = com.example.refwhistle.domain.SyncChunks.split(text, 4000);
+        assertTrue(parts.size() > 1);
+        for (String p : parts) assertTrue(p.getBytes(java.nio.charset.Charset.forName("UTF-8")).length <= 4000);
+
+        java.util.Collections.reverse(parts);
+        com.example.refwhistle.domain.SyncChunks.Assembler a = new com.example.refwhistle.domain.SyncChunks.Assembler();
+        String full = null;
+        for (String p : parts) {
+            String done = a.add(p);
+            if (done == null && p == parts.get(1)) a.add(p);        // a repeated message changes nothing
+            if (done != null) full = done;
+        }
+        assertTrue(full != null);
+        assertEquals(text.split("\n").length, full.split("\n").length);
+        java.util.Set<String> before = new java.util.TreeSet<String>(java.util.Arrays.asList(text.split("\n")));
+        java.util.Set<String> after = new java.util.TreeSet<String>(java.util.Arrays.asList(full.split("\n")));
+        assertEquals(before, after);
+    }
+
+    private static String setupFingerprint(List<Operation> ops) {
+        Tournament t = new Tournament();
+        com.example.refwhistle.domain.SetupOps.fold(ops, t);
+        StringBuilder sb = new StringBuilder();
+        for (com.example.refwhistle.domain.Team x : t.teams) sb.append("T:").append(x.id).append('=').append(x.name).append(';');
+        for (com.example.refwhistle.domain.Venue v : t.venues) {
+            sb.append("V:").append(v.id).append('=').append(v.name).append(',').append(v.outdoor).append(',')
+                    .append(v.openMin).append(',').append(v.closeMin).append(',').append(v.lat).append(',').append(v.lng).append(';');
+        }
+        for (com.example.refwhistle.domain.Referee r : t.referees) {
+            sb.append("R:").append(r.id).append('=').append(r.name).append(',').append(r.teamId).append(';');
+        }
+        return sb.toString();
+    }
+
+    private static Operation setupOp(long t, String dev, Operation.Type type, String id, String data) {
+        return new Operation(new com.example.refwhistle.domain.Stamp(t, 0, dev), type, id, null, data);
+    }
+
+    @Test
+    public void setupTravelsThroughTheLogAndEveryPhoneEndsWithTheSameLists() {
+        List<Operation> ops = new ArrayList<Operation>();
+        ops.add(setupOp(1, "dev-a", Operation.Type.ADD_TEAM, "T1", com.example.refwhistle.domain.SetupOps.teamData("Thunder Hawks")));
+        ops.add(setupOp(2, "dev-b", Operation.Type.ADD_TEAM, "T2", com.example.refwhistle.domain.SetupOps.teamData("Blue | Lions")));
+        ops.add(setupOp(3, "dev-a", Operation.Type.ADD_VENUE, "V1",
+                com.example.refwhistle.domain.SetupOps.venueData("Main Ground", true, 480, 1200, 0, 0)));
+        ops.add(setupOp(4, "dev-b", Operation.Type.ADD_REFEREE, "R1", com.example.refwhistle.domain.SetupOps.refereeData("Aarav", "T1")));
+        ops.add(setupOp(5, "dev-a", Operation.Type.SET_VENUE_LOCATION, "V1", com.example.refwhistle.domain.SetupOps.locationData(18.5, 73.8)));
+
+        String expected = setupFingerprint(ops);
+        assertTrue(expected, expected.contains("T:T2=Blue / Lions"));          // the separator was cleaned
+        assertTrue(expected, expected.contains("18.5,73.8"));                  // the location was applied
+        assertTrue(expected, expected.contains("R:R1=Aarav,T1"));
+
+        java.util.Random rnd = new java.util.Random(7);
+        for (int i = 0; i < 200; i++) {
+            List<Operation> shuffled = new ArrayList<Operation>(ops);
+            java.util.Collections.shuffle(shuffled, rnd);
+            assertEquals(expected, setupFingerprint(shuffled));
+        }
+        // sent through the text format and read back, nothing changes; duplicates change nothing
+        List<Operation> again = LogCodec.decodeAll(LogCodec.encodeAll(ops) + LogCodec.encodeAll(ops));
+        assertEquals(expected, setupFingerprint(again));
+    }
+
+    @Test
+    public void laterEditOfTheSameVenueWinsOnEveryPhone() {
+        List<Operation> ops = new ArrayList<Operation>();
+        ops.add(setupOp(1, "dev-a", Operation.Type.ADD_VENUE, "V1",
+                com.example.refwhistle.domain.SetupOps.venueData("Field", true, 480, 1200, 1, 1)));
+        ops.add(setupOp(9, "dev-b", Operation.Type.SET_VENUE_LOCATION, "V1", com.example.refwhistle.domain.SetupOps.locationData(2, 2)));
+        ops.add(setupOp(5, "dev-a", Operation.Type.SET_VENUE_LOCATION, "V1", com.example.refwhistle.domain.SetupOps.locationData(3, 3)));
+        String one = setupFingerprint(ops);
+        java.util.Collections.reverse(ops);
+        assertEquals(one, setupFingerprint(ops));
+        assertTrue(one, one.contains("2.0,2.0"));
+    }
+
+    @Test
+    public void renameAndRemoveWorkTheSameOnEveryPhone() {
+        List<Operation> ops = new ArrayList<Operation>();
+        ops.add(setupOp(1, "dev-a", Operation.Type.ADD_TEAM, "T1", "Hawks"));
+        ops.add(setupOp(2, "dev-a", Operation.Type.ADD_TEAM, "T2", "Lions"));
+        ops.add(setupOp(3, "dev-b", Operation.Type.ADD_TEAM, "T1", "Thunder Hawks"));   // rename
+        ops.add(setupOp(4, "dev-a", Operation.Type.REMOVE_TEAM, "T2", null));
+        ops.add(setupOp(5, "dev-b", Operation.Type.ADD_TEAM, "T3", "Wolves"));
+        ops.add(setupOp(6, "dev-a", Operation.Type.REMOVE_TEAM, "T3", null));
+        ops.add(setupOp(7, "dev-b", Operation.Type.ADD_TEAM, "T3", "Wolves again"));      // added back later
+        String expected = setupFingerprint(ops);
+        assertEquals("T:T1=Thunder Hawks;T:T3=Wolves again;", expected);
+        java.util.Random rnd = new java.util.Random(3);
+        for (int i = 0; i < 100; i++) {
+            List<Operation> shuffled = new ArrayList<Operation>(ops);
+            java.util.Collections.shuffle(shuffled, rnd);
+            assertEquals(expected, setupFingerprint(shuffled));
+        }
+    }
+
+    @Test
+    public void firstAdminPasswordWinsOnEveryPhone() {
+        String mine = com.example.refwhistle.domain.AdminLock.hash("owner-secret");
+        String other = com.example.refwhistle.domain.AdminLock.hash("someone-else");
+        assertFalse(mine.equals(other));
+        assertEquals(mine, com.example.refwhistle.domain.AdminLock.hash("owner-secret"));     // same input, same hash
+        assertTrue(!mine.contains("owner"));                                                  // the password itself is never stored
+
+        List<Operation> ops = new ArrayList<Operation>();
+        assertEquals(null, com.example.refwhistle.domain.AdminLock.passwordHash(ops));        // nobody set one yet
+        ops.add(setupOp(50, "dev-b", Operation.Type.SET_ADMIN_PIN, "admin", other));          // a later attempt
+        ops.add(setupOp(10, "dev-a", Operation.Type.SET_ADMIN_PIN, "admin", mine));           // the first one
+        assertEquals(mine, com.example.refwhistle.domain.AdminLock.passwordHash(ops));
+        java.util.Collections.reverse(ops);
+        assertEquals(mine, com.example.refwhistle.domain.AdminLock.passwordHash(ops));
+        // it travels through the text format unchanged and does not touch the schedule
+        List<Operation> back = LogCodec.decodeAll(LogCodec.encodeAll(ops));
+        assertEquals(mine, com.example.refwhistle.domain.AdminLock.passwordHash(back));
+        assertTrue(Replayer.replay(back, new Tournament()).matches.isEmpty());
+    }
+
+    @Test
+    public void unreadableSetupEntriesAreSkipped() {
+        List<Operation> ops = new ArrayList<Operation>();
+        ops.add(setupOp(1, "dev-a", Operation.Type.ADD_VENUE, "V1", "broken"));
+        ops.add(setupOp(2, "dev-a", Operation.Type.ADD_TEAM, "T1", "Hawks"));
+        assertEquals("T:T1=Hawks;", setupFingerprint(ops));
+    }
+
+    @Test
+    public void setupEntriesDoNotChangeTheSchedule() {
+        Tournament t = new Tournament();
+        List<Operation> ops = new ArrayList<Operation>();
+        ops.add(setupOp(1, "dev-a", Operation.Type.ADD_TEAM, "T1", "Hawks"));
+        Replayer.Result r = Replayer.replay(ops, t);
+        assertTrue(r.matches.isEmpty());
+    }
+
+    @Test
+    public void emptyLogStillSendsOneMessage() {
+        List<String> parts = com.example.refwhistle.domain.SyncChunks.split("", 4000);
+        assertEquals(1, parts.size());
+        assertEquals("", new com.example.refwhistle.domain.SyncChunks.Assembler().add(parts.get(0)));
     }
 }

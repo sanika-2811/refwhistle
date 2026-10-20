@@ -31,11 +31,11 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.refwhistle.R;
 import com.example.refwhistle.data.DBHelper;
+import com.example.refwhistle.domain.AdminLock;
 import com.example.refwhistle.domain.CsvExporter;
 import com.example.refwhistle.domain.DelayPropagator;
 import com.example.refwhistle.domain.Diagnosis;
 import com.example.refwhistle.domain.GreedyScheduler;
-import com.example.refwhistle.domain.Ledger;
 import com.example.refwhistle.domain.LiveOps;
 import com.example.refwhistle.domain.Robustness;
 import com.example.refwhistle.domain.Match;
@@ -48,6 +48,8 @@ import com.example.refwhistle.domain.Team;
 import com.example.refwhistle.domain.Tournament;
 import com.example.refwhistle.domain.Venue;
 import com.example.refwhistle.domain.WeatherPlanner;
+import com.example.refwhistle.sync.NearbySync;
+import com.example.refwhistle.sync.SyncManager;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.chip.Chip;
@@ -65,12 +67,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements SyncManager.Listener {
     public static final String ADMIN = "ADMIN", REFEREE = "REFEREE", TEAM = "TEAM";
 
     private DBHelper db;
+    private SyncManager sync;
     private SharedPreferences prefs;
-    private TextView tvStatus, tvRole, tvEmpty, tvStatMatches, tvStatClash, tvStatLedger;
+    private TextView tvStatus, tvRole, tvEmpty, tvStatMatches, tvStatClash, tvStatSync;
     private RecyclerView rvMatches;
     private ScrollView svTimeline;
     private TimelineView timeline;
@@ -85,11 +88,11 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Firebase configured but nobody signed in (and not in offline mode): go to login first
-        SharedPreferences gate = getSharedPreferences("refwhistle", Context.MODE_PRIVATE);
+        // Sign in once, or choose "Continue offline" on the login screen.
+        // Without Firebase configured (no google-services.json) there is no login at all.
         if (com.example.refwhistle.cloud.Cloud.available(this)
                 && com.example.refwhistle.cloud.Cloud.user(this) == null
-                && !gate.getBoolean("offline_ok", false)) {
+                && !getSharedPreferences("refwhistle", Context.MODE_PRIVATE).getBoolean("offline_ok", false)) {
             startActivity(new Intent(this, LoginActivity.class));
             finish();
             return;
@@ -102,7 +105,7 @@ public class MainActivity extends AppCompatActivity {
         tvEmpty = findViewById(R.id.tvEmpty);
         tvStatMatches = findViewById(R.id.tvStatMatches);
         tvStatClash = findViewById(R.id.tvStatClash);
-        tvStatLedger = findViewById(R.id.tvStatLedger);
+        tvStatSync = findViewById(R.id.tvStatSync);
         rvMatches = findViewById(R.id.rvMatches);
         svTimeline = findViewById(R.id.svTimeline);
         timeline = findViewById(R.id.timeline);
@@ -138,13 +141,13 @@ public class MainActivity extends AppCompatActivity {
             chip.setCheckable(true);
             chip.setCheckedIconVisible(false);
             chip.setChipBackgroundColorResource(R.color.chip_glass_bg);
-            chip.setChipStrokeColor(android.content.res.ColorStateList.valueOf(0x66FFFFFF));
+            chip.setChipStrokeColorResource(R.color.glass_stroke_strong);
             chip.setChipStrokeWidth(UiKit.dp(this, 1));
             chip.setTextColor(0xFFFFFFFF);
             chip.setId(1000 + d);
             chipDays.addView(chip);
         }
-        chipDays.check(1000);
+        chipDays.check(chipDays.getChildAt(0).getId());
         chipDays.setOnCheckedStateChangeListener(new ChipGroup.OnCheckedStateChangeListener() {
             public void onCheckedChanged(ChipGroup g, List<Integer> ids) {
                 if (!ids.isEmpty()) {
@@ -181,13 +184,42 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        tvStatSync.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                open(SyncActivity.class);
+            }
+        });
+
+        // Notifications and the Nearby (Bluetooth) permissions in one go
+        List<String> need = new ArrayList<String>();
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
+            need.add(Manifest.permission.POST_NOTIFICATIONS);
         }
+        for (String p : NearbySync.neededPermissions()) {
+            if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) need.add(p);
+        }
+        if (!need.isEmpty()) {
+            requestPermissions(need.toArray(new String[0]), 7);
+        }
+        sync = SyncManager.get(this);
+        sync.start();                                  // automatic: internet and phones close by
         if (prefs.getString("role", null) == null) {
             chooseProfile();
         }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 7 && sync != null) sync.start();
+    }
+
+    /** Called when the sync state changes; new changes from another phone refresh the lists. */
+    @Override
+    public void onSyncState(boolean dataChanged) {
+        if (dataChanged) refresh();
+        else tvStatSync.setText(sync.tile());
     }
 
     private void open(Class<?> c) {
@@ -197,8 +229,8 @@ public class MainActivity extends AppCompatActivity {
     private boolean onMenu(int id) {
         if (id == R.id.menu_seed) {
             UiKit.dialog(this).setTitle("Load demo tournament?")
-                    .setMessage("This replaces everything on this phone with a ready-made tournament: "
-                            + "12 teams, 3 venues and 6 referees.")
+                    .setMessage("This adds a ready-made setup (12 teams, 3 venues, 6 referees) and clears the "
+                            + "current matches. Other phones get the same setup when they sync.")
                     .setPositiveButton("Load", new DialogInterface.OnClickListener() {
                         public void onClick(DialogInterface d, int w) {
                             db.seedSampleData();
@@ -214,8 +246,6 @@ public class MainActivity extends AppCompatActivity {
             askRain();
         } else if (id == R.id.menu_csv) {
             exportCsv();
-        } else if (id == R.id.menu_ledger) {
-            showLedger();
         } else if (id == R.id.menu_role) {
             chooseProfile();
         } else if (id == R.id.menu_account) {
@@ -225,28 +255,37 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void account() {
-        if (!com.example.refwhistle.cloud.Cloud.available(this)) {
-            toast("Accounts are not available on this device.");
-            return;
-        }
         com.google.firebase.auth.FirebaseUser u = com.example.refwhistle.cloud.Cloud.user(this);
         UiKit.dialog(this).setTitle("Account")
-                .setMessage(u == null ? "You are using the app offline." : "Signed in as " + u.getEmail())
-                .setPositiveButton(u == null ? "Sign in" : "Sign out", new DialogInterface.OnClickListener() {
+                .setMessage(!com.example.refwhistle.cloud.Cloud.available(this) ? "Accounts are not set up on this build."
+                        : u == null ? "You are using the app offline. Sign in to sync over the internet."
+                        : "Signed in as " + u.getEmail())
+                .setPositiveButton(!com.example.refwhistle.cloud.Cloud.available(this) ? "Close"
+                        : u == null ? "Sign in" : "Sign out", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface d, int w) {
-                        com.example.refwhistle.cloud.Cloud.signOut(MainActivity.this);
+                        if (!com.example.refwhistle.cloud.Cloud.available(MainActivity.this)) return;
+                        sync.stop();
                         prefs.edit().putBoolean("offline_ok", false).apply();
+                        com.example.refwhistle.cloud.Cloud.signOut(MainActivity.this);
                         startActivity(new Intent(MainActivity.this, LoginActivity.class));
                         finish();
                     }
-                }).setNegativeButton("Close", null).show();
+                }).setNegativeButton("Cancel", null).show();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         bottomNav.getMenu().findItem(R.id.nav_schedule).setChecked(true);
+        sync.addListener(this);
+        sync.start();
         refresh();
+    }
+
+    @Override
+    protected void onPause() {
+        sync.removeListener(this);
+        super.onPause();
     }
 
     // ---------- profile (role + who am I) ----------
@@ -290,7 +329,9 @@ public class MainActivity extends AppCompatActivity {
                     public void onClick(DialogInterface d, int w) {
                         String role = roles[spRole.getSelectedItemPosition()];
                         int sel = spWho.getSelectedItemPosition();
+                        // leaving the admin role forgets the password: it has to be typed again to come back
                         prefs.edit().putString("role", role)
+                                .putString("admin_hash", role.equals(ADMIN) ? prefs.getString("admin_hash", "") : "")
                                 .putString("who", ids.isEmpty() || sel < 0 || sel >= ids.size() ? "" : ids.get(sel))
                                 .putString("snapshot", "").apply();
                         refresh();
@@ -299,6 +340,74 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String role() { return prefs.getString("role", ADMIN); }
+
+    /** True only on a phone where the admin password was typed (and still matches the one in the log). */
+    public static boolean isAdminNow(Context c, DBHelper db) {
+        SharedPreferences p = c.getSharedPreferences("refwhistle", Context.MODE_PRIVATE);
+        String cur = AdminLock.passwordHash(db.getOps());
+        return ADMIN.equals(p.getString("role", ADMIN)) && cur != null && cur.equals(p.getString("admin_hash", ""));
+    }
+
+    private boolean isAdmin() {
+        return isAdminNow(this, db);
+    }
+
+    private boolean lockDialogShowing;
+
+    /**
+     * Admin role without the password: ask for it. The first admin creates it; every other admin types
+     * the same one. Cancelling sends the person back to choose another role.
+     */
+    private void askAdminPassword() {
+        if (lockDialogShowing) return;
+        lockDialogShowing = true;
+        final String existing = AdminLock.passwordHash(db.getOps());
+        final EditText pw = new EditText(this);
+        pw.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        pw.setHint(existing == null ? "New admin password (6+ characters)" : "Admin password");
+        LinearLayout box = new LinearLayout(this);
+        box.setPadding(UiKit.dp(this, 24), UiKit.dp(this, 12), UiKit.dp(this, 24), 0);
+        box.addView(pw, new LinearLayout.LayoutParams(-1, -2));
+        UiKit.dialog(this)
+                .setTitle(existing == null ? "Create the admin password" : "Admin password")
+                .setMessage(existing == null
+                        ? "Only people who know this password can be Admin. Share it only with the other admins. "
+                        + "It cannot be reset, so remember it."
+                        : "Referees and team members cannot change the schedule. Admins type the password the "
+                        + "first admin created.")
+                .setView(box)
+                .setCancelable(false)
+                .setPositiveButton("Continue", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        lockDialogShowing = false;
+                        String typed = pw.getText().toString();
+                        if (existing == null) {
+                            if (typed.length() < 6) {
+                                toast("Use at least 6 characters.");
+                                askAdminPassword();
+                                return;
+                            }
+                            String h = AdminLock.hash(typed);
+                            db.setAdminPassword(h);
+                            prefs.edit().putString("admin_hash", h).apply();
+                            refresh();
+                        } else if (AdminLock.hash(typed).equals(existing)) {
+                            prefs.edit().putString("admin_hash", existing).apply();
+                            refresh();
+                        } else {
+                            toast("Wrong password.");
+                            askAdminPassword();
+                        }
+                    }
+                })
+                .setNegativeButton("I am not an admin", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d, int w) {
+                        lockDialogShowing = false;
+                        prefs.edit().putString("role", REFEREE).putString("who", "").putString("admin_hash", "").apply();
+                        chooseProfile();
+                    }
+                }).show();
+    }
     private String who() { return prefs.getString("who", ""); }
 
     // ---------- scheduling ----------
@@ -355,11 +464,11 @@ public class MainActivity extends AppCompatActivity {
         final Tournament t = db.loadTournament();
         List<String> opts = new ArrayList<String>();
         final List<Runnable> acts = new ArrayList<Runnable>();
-        if (role().equals(ADMIN)) {
+        if (isAdmin()) {
             opts.add("Mark running late...");
             acts.add(new Runnable() { public void run() { askDelay(m); } });
         }
-        if (role().equals(ADMIN) || role().equals(REFEREE)) {
+        if (isAdmin() || role().equals(REFEREE)) {
             final Replayer.Result live = db.state();
             if (!live.actualStart.containsKey(m.id)) {
                 opts.add("Kick-off...");
@@ -377,7 +486,7 @@ public class MainActivity extends AppCompatActivity {
             opts.add("Check in at venue (GPS)");
             acts.add(new Runnable() { public void run() { checkIn(m, t); } });
         }
-        if (role().equals(ADMIN)) {
+        if (isAdmin()) {
             opts.add("Cancel match");
             acts.add(new Runnable() { public void run() {
                 db.cancelMatch(m.id);
@@ -651,18 +760,6 @@ public class MainActivity extends AppCompatActivity {
                 }).setNegativeButton("Cancel", null).show();
     }
 
-    // ---------- ledger ----------
-
-    private void showLedger() {
-        int changes = db.getSortedOps().size();
-        String msg = "Your sync code is " + db.ledgerHead() + ".\n\n"
-                + "If another phone shows the same code, both phones have exactly the same schedule and history. "
-                + "A different code means one phone is missing changes, so sync them again.\n\n"
-                + changes + " changes recorded on this phone.";
-        UiKit.dialog(this).setTitle("Sync check").setMessage(msg)
-                .setPositiveButton("OK", null).show();
-    }
-
     // ---------- results, maps, check-in ----------
 
     private void askResult(final Match m, Tournament t) {
@@ -683,10 +780,6 @@ public class MainActivity extends AppCompatActivity {
                         try {
                             db.setResult(m.id, Integer.parseInt(a.getText().toString().trim()),
                                     Integer.parseInt(b.getText().toString().trim()));
-                            String code = prefs.getString("code", "");
-                            if (!code.isEmpty() && com.example.refwhistle.cloud.Cloud.user(MainActivity.this) != null) {
-                                com.example.refwhistle.cloud.Cloud.publishStandings(db, code);   // live dashboard
-                            }
                             refresh();
                         } catch (NumberFormatException e) {
                             toast("Enter both scores");
@@ -762,12 +855,12 @@ public class MainActivity extends AppCompatActivity {
     // ---------- list ----------
 
     private void refresh() {
+        if (role().equals(ADMIN) && !isAdmin() && prefs.getString("role", null) != null) askAdminPassword();
         Tournament t = db.loadTournament();
         Replayer.Result st = db.state();
-        Logos.apply(st.logos);
         List<Match> all = db.getMatches();
         List<Match> day = new ArrayList<Match>();
-        boolean admin = role().equals(ADMIN);
+        boolean admin = isAdmin();
         for (Match m : all) {
             if (role().equals(REFEREE) && !m.refereeId.equals(who())) continue;
             if (role().equals(TEAM) && !m.hasTeam(who())) continue;
@@ -786,6 +879,15 @@ public class MainActivity extends AppCompatActivity {
             tvEmpty.setText("Nothing scheduled on this day.");
         }
         fab.setVisibility(admin ? View.VISIBLE : View.GONE);
+        // only admins see the screens and menu items that change the schedule or the setup
+        android.view.Menu menu = ((MaterialToolbar) findViewById(R.id.toolbar)).getMenu();
+        int[] adminOnly = {R.id.menu_seed, R.id.menu_add, R.id.menu_rain};
+        for (int mid : adminOnly) {
+            android.view.MenuItem item = menu.findItem(mid);
+            if (item != null) item.setVisible(admin);
+        }
+        android.view.MenuItem setupTab = bottomNav.getMenu().findItem(R.id.nav_setup);
+        if (setupTab != null) setupTab.setVisible(admin);
 
         String me = admin ? "Admin" : (role().equals(REFEREE) ? "Referee " + t.refereeName(who())
                 : "Team " + t.teamName(who()));
@@ -795,7 +897,7 @@ public class MainActivity extends AppCompatActivity {
         });
         tvStatMatches.setText(String.valueOf(all.size()));
         tvStatClash.setText(String.valueOf(st.rescheduled.size()));
-        tvStatLedger.setText(db.ledgerHead());
+        tvStatSync.setText(sync.tile());
         notifyChangesForMe(all, t);
         showSuggestions(admin, st, all, t);
     }
@@ -803,7 +905,7 @@ public class MainActivity extends AppCompatActivity {
     /** After a sync, tell a referee/team member (locally) if one of their matches moved. */
     private void notifyChangesForMe(List<Match> all, Tournament t) {
         String who = who();
-        if (who.isEmpty() || role().equals(ADMIN)) return;
+        if (who.isEmpty() || isAdmin()) return;
         Map<String, String> now = new HashMap<String, String>();
         for (Match m : all) {
             if (m.refereeId.equals(who) || m.hasTeam(who)) {

@@ -7,7 +7,6 @@ import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.color.MaterialColors;
 
@@ -74,22 +73,15 @@ public class UiKit {
         return MaterialColors.getColor(v, androidx.appcompat.R.attr.colorPrimary, 0xFF3949AB);
     }
 
-    /** A rounded card with a vertical LinearLayout inside; add your views to the returned layout. */
+    /** A glass card (see res/drawable/bg_card.xml); add your views to the returned layout. */
     public static LinearLayout card(Context c, LinearLayout parent) {
-        MaterialCardView card = new MaterialCardView(c);
-        card.setRadius(dp(c, 22));
-        card.setCardElevation(0);
-        card.setCardBackgroundColor(0x24FFFFFF);          // frosted glass
-        card.setStrokeColor(0x4DFFFFFF);
-        card.setStrokeWidth(dp(c, 1));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(dp(c, 12), dp(c, 6), dp(c, 12), dp(c, 6));
-        card.setLayoutParams(lp);
         LinearLayout inner = new LinearLayout(c);
         inner.setOrientation(LinearLayout.VERTICAL);
+        inner.setBackgroundResource(com.example.refwhistle.R.drawable.bg_card);
         inner.setPadding(dp(c, 16), dp(c, 14), dp(c, 16), dp(c, 14));
-        card.addView(inner);
-        parent.addView(card);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(dp(c, 12), dp(c, 6), dp(c, 12), dp(c, 6));
+        parent.addView(inner, lp);
         return inner;
     }
 
@@ -114,6 +106,7 @@ public class UiKit {
         header.setPadding(dp(a, 16), dp(a, 14), dp(a, 16), dp(a, 22));
         TextView back = new TextView(a);
         back.setText("< Back");
+        back.setTag("back");
         back.setTextColor(0xCCFFFFFF);
         back.setTextSize(14);
         back.setPadding(0, 0, 0, dp(a, 6));

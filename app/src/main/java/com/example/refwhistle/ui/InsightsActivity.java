@@ -150,10 +150,6 @@ public class InsightsActivity extends AppCompatActivity {
         if (!st.rescheduled.isEmpty()) {
             line(checks, true, st.rescheduled.size() + " clash(es) from syncing were fixed automatically");
         }
-        TextView code = UiKit.text(this, checks, "Sync code " + db.ledgerHead()
-                + ". Phones with the same code have the same data.", 12, false);
-        code.setAlpha(0.7f);
-        code.setPadding(0, UiKit.dp(this, 8), 0, 0);
     }
 
     private void chart(LinearLayout card, List<String> labels, List<Float> values, List<Integer> colors) {

@@ -29,7 +29,7 @@
             android:layout_marginStart="16dp"
             android:layout_marginTop="-8dp"
             android:text="Admin"
-            android:textColor="#CCFFFFFF"
+            android:textColor="@color/text_soft"
             android:textSize="13sp" />
 
         <LinearLayout
@@ -63,7 +63,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Matches"
-                    android:textColor="#CCFFFFFF"
+                    android:textColor="@color/text_soft"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -90,7 +90,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Clashes fixed"
-                    android:textColor="#CCFFFFFF"
+                    android:textColor="@color/text_soft"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -105,7 +105,7 @@
                 android:padding="10dp">
 
                 <TextView
-                    android:id="@+id/tvStatLedger"
+                    android:id="@+id/tvStatSync"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="monospace"
@@ -117,8 +117,8 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Sync code"
-                    android:textColor="#CCFFFFFF"
+                    android:text="Auto-sync"
+                    android:textColor="@color/text_soft"
                     android:textSize="12sp" />
             </LinearLayout>
         </LinearLayout>
@@ -173,7 +173,7 @@
                 android:paddingHorizontal="14dp"
                 android:textColor="@color/white"
                 android:textSize="12sp"
-                app:strokeColor="#66FFFFFF"
+                app:strokeColor="@color/glass_stroke_strong"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="List" />
@@ -185,7 +185,7 @@
                 android:paddingHorizontal="14dp"
                 android:textColor="@color/white"
                 android:textSize="12sp"
-                app:strokeColor="#66FFFFFF"
+                app:strokeColor="@color/glass_stroke_strong"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Timeline" />
@@ -243,11 +243,11 @@
             android:layout_margin="16dp"
             android:text="Generate"
             android:textColor="@color/white"
-            app:backgroundTint="#55FFFFFF"
+            app:backgroundTint="@color/glass_button"
             app:elevation="0dp"
             app:icon="@drawable/ic_bolt"
             app:iconTint="@color/white"
-            app:strokeColor="#80FFFFFF"
+            app:strokeColor="@color/glass_button_stroke"
             app:strokeWidth="1dp" />
     </FrameLayout>
 
@@ -255,7 +255,7 @@
         android:id="@+id/bottomNav"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#26FFFFFF"
+        android:background="@color/glass_bar"
         app:itemIconTint="@color/white"
         app:itemTextColor="@color/white"
         app:labelVisibilityMode="labeled"
