@@ -96,6 +96,10 @@ Measured on this machine (SimMain): schedule cost improved over greedy in every 
 ## Build / release
 Open the folder in Android Studio and run. For a signed release copy `keystore.properties.example` to `keystore.properties`, point it at your `.jks`, then build the `release` variant.
 
+## Live dashboard
+Open https://refwhistle-a0303.web.app, type TEST2026 and press Watch.
+TEST2026 is a public demo tournament. Do not use it for a real tournament.
+
 ## Not done / honest limits
 - The Android app compiles and the JUnit tests pass (`./gradlew testDebugUnitTest`). Nearby (Bluetooth) sync needs two real phones and has not been field-tested yet; the merge logic itself is tested.
 - Internet sync needs your own `google-services.json` and Email/Password sign-in enabled. Without it the app works offline and syncs over Bluetooth only.
